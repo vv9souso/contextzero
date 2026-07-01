@@ -6,7 +6,7 @@ ContextZero requires Python 3.10 or newer.
 
 ```bash
 python3 --version
-python3 -m pip install git+https://github.com/<your-username>/contextzero.git
+python3 -m pip install git+https://github.com/vv9souso/contextzero.git
 contextzero init --install-claude --brain
 contextzero doctor . --brain
 ```
@@ -14,7 +14,7 @@ contextzero doctor . --brain
 For editable development:
 
 ```bash
-git clone https://github.com/<your-username>/contextzero.git
+git clone https://github.com/vv9souso/contextzero.git
 cd contextzero
 python3 -m pip install -e .[dev]
 pytest
@@ -24,7 +24,7 @@ pytest
 
 ```powershell
 py --version
-py -m pip install git+https://github.com/<your-username>/contextzero.git
+py -m pip install git+https://github.com/vv9souso/contextzero.git
 contextzero init --install-claude --brain
 contextzero doctor . --brain
 ```
@@ -32,7 +32,7 @@ contextzero doctor . --brain
 For editable development:
 
 ```powershell
-git clone https://github.com/<your-username>/contextzero.git
+git clone https://github.com/vv9souso/contextzero.git
 cd contextzero
 py -m pip install -e .[dev]
 pytest
@@ -42,7 +42,7 @@ pytest
 
 ```bash
 python3 --version
-python3 -m pip install git+https://github.com/<your-username>/contextzero.git
+python3 -m pip install git+https://github.com/vv9souso/contextzero.git
 contextzero init --install-claude --brain
 contextzero doctor . --brain
 ```
@@ -50,7 +50,7 @@ contextzero doctor . --brain
 For editable development:
 
 ```bash
-git clone https://github.com/<your-username>/contextzero.git
+git clone https://github.com/vv9souso/contextzero.git
 cd contextzero
 python3 -m pip install -e .[dev]
 pytest

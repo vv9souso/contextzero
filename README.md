@@ -52,17 +52,20 @@ All scans run locally. ContextZero does not upload project files.
 ## Quick Start
 
 ```bash
-pip install git+https://github.com/<your-username>/contextzero.git
+pip install git+https://github.com/vv9souso/contextzero.git
+contextzero demo
 contextzero audit .
-contextzero init --install-claude --brain
+contextzero start . "deployment check"
 ```
 
 ## Editable Local Install
 
 ```bash
-git clone https://github.com/<your-username>/contextzero.git
+git clone https://github.com/vv9souso/contextzero.git
 cd contextzero
-pip install -e .
+python3 -m pip install -e ".[dev]"
+pytest
+contextzero demo
 ```
 
 ## Future PyPI Install

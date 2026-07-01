@@ -5,17 +5,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_contextzero_codex_skill_exists_and_mentions_trigger() -> None:
-    skill_path = ROOT / ".agents" / "skills" / "contextzero" / "SKILL.md"
+    skill_paths = [
+        ROOT / ".agents" / "skills" / "contextzero" / "SKILL.md",
+        ROOT / ".codex" / "skills" / "contextzero" / "SKILL.md",
+    ]
 
-    assert skill_path.exists()
+    for skill_path in skill_paths:
+        assert skill_path.exists()
 
-    skill_text = skill_path.read_text(encoding="utf-8")
+        skill_text = skill_path.read_text(encoding="utf-8")
 
-    assert 'description: Use this skill when the user says "run contextzero"' in skill_text
-    assert "run contextzero" in skill_text
-    assert "run contextzero means session bootstrap, not scan" in skill_text
-    assert 'contextzero start . "general repo work"' in skill_text
-    assert "Do not edit files during this step." in skill_text
+        assert 'description: Use this skill when the user says "run contextzero"' in skill_text
+        assert "run contextzero" in skill_text
+        assert "run contextzero means session bootstrap, not scan" in skill_text
+        assert 'contextzero start . "general repo work"' in skill_text
+        assert 'contextzero start . "<task>"' in skill_text
+        assert "Do not read the whole repo first." in skill_text
+        assert "Do not edit files during this step." in skill_text
 
 
 def test_codex_trigger_docs_are_present() -> None:

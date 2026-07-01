@@ -27,7 +27,7 @@ Install ContextZero in this repo.
 Steps:
 1. Check whether Python 3.10+ is installed.
 2. Install ContextZero from GitHub:
-   `pip install git+https://github.com/<your-username>/contextzero.git`
+   `pip install git+https://github.com/vv9souso/contextzero.git`
 3. Run:
    `contextzero init --install-claude --brain`
 4. Verify these files were created:
@@ -51,7 +51,7 @@ Set up ContextZero so future Claude/Codex sessions start with a clean repo brain
 Tasks:
 1. Check Python version.
 2. Install ContextZero from GitHub:
-   `pip install git+https://github.com/<your-username>/contextzero.git`
+   `pip install git+https://github.com/vv9souso/contextzero.git`
 3. Run:
    `contextzero init --install-claude --brain`
 4. Run:
