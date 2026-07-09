@@ -10,22 +10,16 @@ from .token_estimator import estimate_tokens
 SOURCE_OF_TRUTH_HINTS = (
     "current_state",
     "source_of_truth",
-    "truth",
-    "current",
-    "production_deploy_current",
-    "deployment_current",
-    "latest",
-    "active",
+    "current_status",
+    "architecture",
+    "overview",
     "product.md",
-    "landing",
-    "join",
-    "backend/app/main.py",
-    "backend/requirements.txt",
 )
 SOURCE_OF_TRUTH_SUFFIXES = {".md", ".txt", ".toml", ".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".yaml", ".yml"}
 SOURCE_OF_TRUTH_PENALTY_HINTS = (
-    ".impeccable/",
     "critique",
+    "review",
+    "audit",
     "conversation-log",
     "handoff",
     "old",
@@ -69,8 +63,11 @@ def _git_value(repo_path: Path, args: list[str]) -> str:
 
 
 def _find_lines(files: list[dict], hints: tuple[str, ...], limit: int = 4) -> list[str]:
+    from .noise import is_noise_path
     found: list[str] = []
     for file_info in files:
+        if is_noise_path(file_info.get("relative_path", "")):
+            continue  # never pull priorities/decisions from tests/examples/fixtures
         for line in file_info["content"].splitlines():
             clean = line.strip(" -*\t")
             lowered = clean.lower()
@@ -91,18 +88,11 @@ def _field_line(name: str, items: list[str] | str) -> str:
 
 
 def _path_candidates(repo_path: Path) -> list[str]:
+    from .scanner import collect_target_files
     paths: list[str] = []
-    for path in repo_path.rglob("*"):
-        if not path.is_file() or path.suffix.lower() not in SOURCE_OF_TRUTH_SUFFIXES:
-            continue
-        try:
-            rel_parts = path.relative_to(repo_path).parts
-            rel_path = path.relative_to(repo_path).as_posix()
-        except ValueError:
-            continue
-        if any(part in EXCLUDED_DIRS for part in rel_parts):
-            continue
-        paths.append(rel_path)
+    for path in collect_target_files(repo_path):
+        if path.suffix.lower() in SOURCE_OF_TRUTH_SUFFIXES:
+            paths.append(path.relative_to(repo_path).as_posix())
     return paths
 
 
@@ -114,24 +104,26 @@ def _is_source_truth_candidate(path: str) -> bool:
 
 
 def _source_truth_candidates(repo_path: Path, files: list[dict], stale_paths: set[str]) -> list[str]:
+    from .noise import is_noise_path
     candidates: list[str] = []
     for rel_path in [file["relative_path"] for file in files] + _path_candidates(repo_path):
+        if is_noise_path(rel_path):
+            continue  # committed tests/examples/fixtures are never source-of-truth
         if _is_source_truth_candidate(rel_path):
             if rel_path not in stale_paths and rel_path not in candidates:
                 candidates.append(rel_path)
-    candidates.sort(
-        key=lambda path: (
-            0 if path == "PRODUCT.md" else 1,
-            0 if path == "README.md" else 1,
-            0 if path.lower().startswith("frontend/src/landing/landing") else 1,
-            0 if path.lower().startswith("frontend/src/join/") else 1,
-            0 if "production_deploy_current" in path.lower() else 1,
-            0 if "current_state_truth" in path.lower() else 1,
-            0 if path.lower() == "backend/app/main.py" else 1,
-            0 if path.lower() == "backend/requirements.txt" else 1,
+
+    def _rank(path: str) -> tuple:
+        lowered = path.lower()
+        name = path.split("/")[-1].lower()
+        return (
+            0 if name in {"product.md", "readme.md"} else 1,
+            0 if "current" in lowered or "source_of_truth" in lowered else 1,
+            path.count("/"),  # shallower files first
             path,
         )
-    )
+
+    candidates.sort(key=_rank)
     return candidates[:6]
 
 

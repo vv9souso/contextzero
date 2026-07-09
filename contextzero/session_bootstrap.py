@@ -13,18 +13,7 @@ from .token_estimator import estimate_tokens
 PREFERRED_PATH_HINTS = ("current", "truth", "active", "latest")
 OPTIONAL_PATH_HINTS = ("long", "patch_notes", "history")
 STALE_PATH_HINTS = ("archive", "archived", "old", "previous", "deprecated")
-FRONTEND_TASK_TERMS = {"landing", "homepage", "hero", "creator", "join", "cta", "nav", "page", "frontend"}
-BACKEND_TASK_TERMS = {"backend", "api", "auth", "database", "config", "server", "waitlist"}
 CRITIQUE_TASK_TERMS = {"critique", "audit", "review"}
-FRONTEND_SOURCE_HINTS = (
-    "frontend/src/landing/",
-    "frontend/src/join/",
-    "landing.tsx",
-    "herosection",
-    "landingnav",
-    "cta",
-    "joinpage",
-)
 TASK_TERMS = {
     "deployment": ("deployment", "deploy", "production", "release"),
     "frontend": ("frontend", "front", "landing", "homepage", "hero", "creator", "join", "page", "ui", "cta", "nav", "css", "react", "vite"),
@@ -36,11 +25,15 @@ TASK_TERMS = {
 }
 
 
+_STOPWORDS = {"the", "and", "for", "fix", "add", "update", "change", "make",
+              "with", "this", "that", "from", "into", "our", "new", "use", "using"}
+
+
 def _task_tokens(task: str) -> set[str]:
     return {
         token
         for token in "".join(ch.lower() if ch.isalnum() else " " for ch in task).split()
-        if len(token) > 2
+        if len(token) > 2 and token not in _STOPWORDS
     }
 
 
@@ -73,55 +66,40 @@ def _source_truth_paths(capsule: str) -> list[str]:
     return []
 
 
-def _is_frontend_task(task: str) -> bool:
-    return bool(_task_tokens(task) & FRONTEND_TASK_TERMS) or "landing page" in task.lower()
-
-
-def _allows_backend(task: str) -> bool:
-    return bool(_task_tokens(task) & BACKEND_TASK_TERMS)
-
-
 def _allows_critique(task: str) -> bool:
     lowered = task.lower()
     return bool(_task_tokens(task) & CRITIQUE_TASK_TERMS) or "design review" in lowered
 
 
-def _is_frontend_task_path(path: str) -> bool:
-    lowered = path.lower()
-    return any(hint in lowered for hint in FRONTEND_SOURCE_HINTS)
-
-
-def _is_task_matching_source_truth(path: str, task: str) -> bool:
-    lowered = path.lower()
-    task_tokens = _task_tokens(task)
-    if _is_frontend_task(task) and (_is_frontend_task_path(path) or lowered in {"product.md", "readme.md"}):
-        return True
-    return any(token in lowered for token in task_tokens)
-
-
 def _is_deferred_critique(path: str, task: str) -> bool:
+    # Generic review-artifact heuristic; no project-specific path literal.
     lowered = path.lower()
-    return (".impeccable/" in lowered or "critique" in lowered) and not _allows_critique(task)
+    is_review_artifact = any(term in lowered for term in ("critique", "audit", "review"))
+    return is_review_artifact and not _allows_critique(task)
 
 
-def _repo_task_paths(repo_path: str | Path, task: str) -> list[str]:
-    if not _is_frontend_task(task):
+def _task_matching_source_files(repo_path: str | Path, task: str) -> list[str]:
+    """Repo source files whose path contains a task token (generic, no fixed paths).
+
+    Bypasses read_map truncation so an obviously-relevant file still reaches
+    the ranker. Noise dirs excluded unless the task is about tests.
+    """
+    from .noise import is_noise_path, task_wants_tests
+    from .read_map_builder import _source_files
+
+    tokens = _task_tokens(task)
+    if not tokens:
         return []
     repo = resolve_repo_path(repo_path)
-    paths: list[str] = []
-    for path in repo.rglob("*"):
-        if not path.is_file():
+    wants_tests = task_wants_tests(task)
+    out: list[str] = []
+    for path in _source_files(repo):
+        rel = path.relative_to(repo).as_posix()
+        if is_noise_path(rel) and not wants_tests:
             continue
-        try:
-            rel_parts = path.relative_to(repo).parts
-            rel_path = path.relative_to(repo).as_posix()
-        except ValueError:
-            continue
-        if any(part in EXCLUDED_DIRS for part in rel_parts):
-            continue
-        if _is_frontend_task_path(rel_path) and rel_path not in paths:
-            paths.append(rel_path)
-    return sorted(paths)
+        if any(tok in rel.lower() for tok in tokens):
+            out.append(rel)
+    return out
 
 
 def _read_first(
@@ -130,107 +108,85 @@ def _read_first(
     source_truth_paths: list[str] | None = None,
     repo_path: str | Path = ".",
 ) -> list[str]:
+    # Gather candidates from ALL read_map categories, then let _read_score rank.
+    # Category-gating on the task caused relevant files to be dropped when the
+    # task phrasing didn't happen to hit a category keyword.
     files: list[str] = []
-    for category in _task_categories(task):
-        for path in read_map.get(category, {}).get("recommended_files", []):
+    for category, data in read_map.items():
+        for path in data.get("recommended_files", []):
             if path not in files:
                 files.append(path)
-    if not files:
-        for category in ("docs", "unknown"):
-            for path in read_map.get(category, {}).get("recommended_files", []):
-                if path not in files:
-                    files.append(path)
-    task_source_truth = [
-        path
-        for path in (source_truth_paths or [])
-        if _is_task_matching_source_truth(path, task) and path not in files
-    ]
-    files.extend(task_source_truth)
-    for path in _repo_task_paths(repo_path, task):
+    for path in (source_truth_paths or []):
         if path not in files:
             files.append(path)
-    ranked = sorted(files, key=lambda path: _read_score(path, task), reverse=True)
+    # Seed directly from repo source files whose path matches a task token, so a
+    # clearly-relevant file can't be lost to per-category read_map truncation.
+    for path in _task_matching_source_files(repo_path, task):
+        if path not in files:
+            files.append(path)
+    ranked = sorted(files, key=lambda p: _read_score(p, task), reverse=True)
     primary = [
-        path
-        for path in ranked
-        if not _is_optional_history(path) and not _is_deferred_critique(path, task)
+        p for p in ranked
+        if _read_score(p, task) >= 0
+        and not _is_optional_history(p)
+        and not _is_deferred_critique(p, task)
     ][:5]
-    sticky_frontend_truth = [
-        path
-        for path in (source_truth_paths or [])
-        if _is_frontend_task(task) and _is_frontend_task_path(path) and _is_task_matching_source_truth(path, task)
-    ]
-    for path in sticky_frontend_truth:
-        if path in primary:
-            continue
-        if len(primary) < 5:
-            primary.append(path)
-        else:
-            primary[-1] = path
-        primary = sorted(dict.fromkeys(primary), key=lambda item: _read_score(item, task), reverse=True)
-    if _is_frontend_task(task) and not any(path.lower() in {"product.md", "readme.md"} for path in primary):
-        reference_docs = [path for path in files if path.lower() in {"product.md", "readme.md"}]
-        if reference_docs:
-            reference_doc = sorted(reference_docs, key=lambda item: _read_score(item, task), reverse=True)[0]
-            if len(primary) < 5:
-                primary.append(reference_doc)
-            else:
-                primary[-1] = reference_doc
-    return primary[:5] or [path for path in ranked if not _is_optional_history(path)][:5] or ranked[:5] or ["unknown"]
+    return primary or ranked[:5] or ["unknown"]
+
+
+_GENERATED_HINTS = ("package-lock.json", "pnpm-lock.yaml", "yarn.lock", ".pytest_cache",
+                    "vendor/", "third_party/", "dist/", "build/")
 
 
 def _read_score(path: str, task: str) -> int:
+    from .noise import is_noise_path, task_wants_tests
+
     lowered = path.lower()
+    name = lowered.split("/")[-1]
     task_tokens = _task_tokens(task)
-    score = 0
     categories = _task_categories(task)
+    score = 0
+
     for token in task_tokens:
         if token in lowered:
-            score += 18
+            score += 25
+
+    top_dir = lowered.split("/")[0] if "/" in lowered else ""
     for category in categories:
         for term in TASK_TERMS.get(category, (category,)):
-            if term in lowered:
-                score += 25
-    if "frontend" in categories and lowered.startswith("frontend/"):
-        score += 45
-    if "landing" in task_tokens and "frontend/src/landing/" in lowered:
-        score += 60
-    if _is_frontend_task(task) and lowered == "frontend/src/landing/landing.tsx":
-        score += 120
-    if _is_frontend_task(task) and "frontend/src/landing/components/herosection" in lowered:
-        score += 90
-    if _is_frontend_task(task) and "frontend/src/landing/components/landingnav" in lowered:
-        score += 80
-    if _is_frontend_task(task) and "frontend/src/join/joinpage" in lowered:
-        score += 75
-    if {"join", "creator"} & task_tokens and "frontend/src/join/" in lowered:
-        score += 55
-    if any(name in lowered for name in ("landing", "hero", "nav", "cta")) and task_tokens & {"landing", "hero", "nav", "cta", "page", "creator"}:
-        score += 35
-    if lowered in {"product.md", "readme.md"}:
-        score += 45
-    if lowered.startswith(".github/workflows/") and not (task_tokens & {"ci", "test", "tests", "deploy", "workflow", "workflows"}):
-        score -= 180
-    if "backend/app/auth" in lowered and not (task_tokens & {"auth", "login", "clerk", "jwt"}):
-        score -= 120
-    if lowered.startswith("backend/") and not _allows_backend(task):
-        score -= 180 if _is_frontend_task(task) else 80
-    if _is_deferred_critique(path, task):
-        score -= 160
-    if "package-lock.json" in lowered or ".pytest_cache" in lowered:
-        score -= 120
-    if "production_deploy_current" in lowered or "deployment_current" in lowered:
-        score += 80
-    if "current_state_truth" in lowered or "source_of_truth" in lowered:
-        score += 65
-    if any(hint in lowered for hint in PREFERRED_PATH_HINTS):
-        score += 35
-    if lowered == "readme.md":
+            if term and (term == top_dir or term in name):
+                score += 30
+                break
+
+    if name in {"readme.md", "product.md"}:
         score += 20
-    if any(hint in lowered for hint in OPTIONAL_PATH_HINTS):
-        score -= 70
+
+    if lowered.endswith((".py", ".ts", ".tsx", ".js", ".jsx")) and (task_tokens & {
+        "bug", "implement", "refactor", "code", "function", "endpoint", "api"
+    }):
+        score += 15
+
+    if "source_of_truth" in lowered or "current_state" in lowered:
+        score += 25
+
+    if lowered.startswith(".github/") and not (task_tokens & {
+        "ci", "deploy", "deployment", "release", "workflow", "workflows", "action", "actions", "pipeline"
+    }):
+        score -= 60
+
+    if any(hint in lowered for hint in _GENERATED_HINTS):
+        score -= 40
     if any(hint in lowered for hint in STALE_PATH_HINTS):
-        score -= 100
+        score -= 60
+    if any(hint in lowered for hint in OPTIONAL_PATH_HINTS):
+        score -= 30
+    if _is_deferred_critique(path, task):
+        score -= 60
+    # noise dirs (tests/examples/fixtures/demo) deprioritized unless task wants tests
+    if is_noise_path(path) and not task_wants_tests(task):
+        score -= 50
+
+    score -= lowered.count("/")  # prefer shallower on ties
     return score
 
 

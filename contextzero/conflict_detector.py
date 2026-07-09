@@ -32,16 +32,27 @@ def _find_matches(files: Iterable[dict], phrases: tuple[str, ...]) -> list[dict]
     return matches
 
 
+_MANIFEST_NAMES = {
+    "requirements.txt", "pyproject.toml", "package.json", "go.mod",
+    "cargo.toml", "pom.xml", "build.gradle", "gemfile", "composer.json",
+}
+
+
 def _source_truth_score(path: str, label: str) -> int:
     lowered = path.lower()
+    name = lowered.split("/")[-1]
     score = 0
-    if lowered in {"backend/requirements.txt", "pyproject.toml", "backend/app/main.py", "readme.md"}:
+    # Dependency manifests are the authoritative source for stack conflicts,
+    # on any repo — no project-specific paths.
+    if name in _MANIFEST_NAMES:
         score += 100
-    if label == "FastAPI vs Express" and lowered in {"backend/requirements.txt", "backend/app/main.py", "pyproject.toml", "readme.md"}:
-        score += 100
+    if name == "readme.md":
+        score += 60
     if lowered.endswith((".py", ".toml", ".txt", ".json", ".yaml", ".yml")):
         score += 20
-    if any(part in lowered for part in (".impeccable/", "conversation-log", "handoff", "old", "deprecated", "archive", "critique")):
+    if any(part in lowered for part in
+           ("conversation-log", "handoff", "old", "deprecated", "archive",
+            "critique", "review", "audit")):
         score -= 120
     return score
 

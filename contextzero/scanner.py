@@ -52,10 +52,19 @@ def _is_scan_target(path: Path, repo_path: Path) -> bool:
 
 
 def collect_target_files(repo_path: str | Path) -> list[Path]:
+    from .gitfiles import relevant_files  # local import to avoid cycles
+
     repo = resolve_repo_path(repo_path)
     if not repo.exists():
         return []
-    return sorted(path for path in repo.rglob("*") if _is_scan_target(path, repo))
+
+    relevant = relevant_files(repo)
+    if relevant is not None:
+        candidates = [repo / rel for rel in relevant]
+    else:
+        candidates = list(repo.rglob("*"))
+
+    return sorted(path for path in candidates if _is_scan_target(path, repo))
 
 
 def read_file_record(path: Path, repo_path: str | Path) -> dict:
