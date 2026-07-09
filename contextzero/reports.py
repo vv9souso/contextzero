@@ -178,7 +178,7 @@ def screenshot_summary(repo_path: str | Path = ".", scan: dict | None = None) ->
             f"- Stale files: {summary['stale_file_count']}",
             f"- Conflicts: {summary['conflict_count']}",
             f"- Duplicate blocks: {summary['duplicate_count']}",
-            f"- current_state.md: {artifact_path(repo_path, 'current_state')}",
-            f"- read_map.json: {artifact_path(repo_path, 'read_map')}",
+            f"- current_state.md: {Path(artifact_path(repo_path, 'current_state')).as_posix()}",
+            f"- read_map.json: {Path(artifact_path(repo_path, 'read_map')).as_posix()}",
         ]
     )

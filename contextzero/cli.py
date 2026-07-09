@@ -126,14 +126,14 @@ def _run_audit(repo_path: str | Path) -> str:
             screenshot_summary(repo_path, scan),
             "",
             "Artifacts written:",
-            f"- current_state.md: {current_state}",
-            f"- read_map.json: {read_map}",
-            f"- contextzero-report.md: {report}",
-            f"- contextzero-report.json: {Path(report).with_suffix('.json')}",
-            f"- token_waste_estimate.json: {Path(report).parent / 'token_waste_estimate.json'}",
-            f"- stale_files.json: {Path(report).parent / 'stale_files.json'}",
-            f"- duplicates.json: {Path(report).parent / 'duplicates.json'}",
-            f"- conflicts.json: {Path(report).parent / 'conflicts.json'}",
+            f"- current_state.md: {Path(current_state).as_posix()}",
+            f"- read_map.json: {Path(read_map).as_posix()}",
+            f"- contextzero-report.md: {Path(report).as_posix()}",
+            f"- contextzero-report.json: {Path(report).with_suffix('.json').as_posix()}",
+            f"- token_waste_estimate.json: {(Path(report).parent / 'token_waste_estimate.json').as_posix()}",
+            f"- stale_files.json: {(Path(report).parent / 'stale_files.json').as_posix()}",
+            f"- duplicates.json: {(Path(report).parent / 'duplicates.json').as_posix()}",
+            f"- conflicts.json: {(Path(report).parent / 'conflicts.json').as_posix()}",
         ]
     )
 
@@ -251,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
             importance_score=8,
         )
         print("ContextZero demo")
-        print(f"Repo: {repo}")
+        print(f"Repo: {Path(repo).as_posix()}")
         scan = scan_repo(repo)
         write_scan_artifacts(repo, scan)
         write_report(repo)
