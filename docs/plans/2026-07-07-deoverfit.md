@@ -614,12 +614,22 @@ def _read_score(path: str, task: str) -> int:
     }):
         score += 15
 
+    if lowered.startswith(".github/") and not (task_tokens & {
+        "ci", "deploy", "deployment", "release", "workflow", "workflows", "action", "actions", "pipeline"
+    }):
+        score -= 60
     if any(hint in lowered for hint in _GENERATED_HINTS):
         score -= 40
     if any(hint in lowered for hint in STALE_PATH_HINTS):
         score -= 60
     if any(hint in lowered for hint in OPTIONAL_PATH_HINTS):
         score -= 30
+    if _is_deferred_critique(path, task):
+        score -= 60
+    # review #3b: noise dirs (tests/examples/fixtures/demo) deprioritized unless task wants tests
+    from .noise import is_noise_path, task_wants_tests
+    if is_noise_path(path) and not task_wants_tests(task):
+        score -= 50
 
     score -= lowered.count("/")  # prefer shallower on ties
     return score
@@ -649,7 +659,18 @@ def _read_first(read_map, task, source_truth_paths=None, repo_path="."):
     return primary or ranked[:5] or ["unknown"]
 ```
 
-Keep `_is_deferred_critique` and `_is_optional_history` (they are generic enough — `.impeccable/` + `critique` is a reasonable generic "review artifact" heuristic; leave as-is).
+**Review #2:** Generalize `_is_deferred_critique` — remove the `.impeccable/` project literal, match generic review artifacts instead:
+
+```python
+def _is_deferred_critique(path: str, task: str) -> bool:
+    lowered = path.lower()
+    is_review_artifact = any(term in lowered for term in ("critique", "audit", "review"))
+    return is_review_artifact and not _allows_critique(task)
+```
+
+Keep `_is_optional_history` as-is (already generic).
+
+**Note:** `conflict_detector.py::_source_truth_score` also carried project literals (`backend/app/main.py`, a `FastAPI vs Express` special case, `.impeccable/`). Generalize it too — score by dependency-manifest *name* (`requirements.txt`, `pyproject.toml`, `package.json`, …) + `readme.md`, and penalize `critique|audit|review|handoff|old|deprecated|archive`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
